@@ -1,6 +1,6 @@
 # 🚀 HireFlow - Team Developer Instructions & Setup Guide
 
-Welcome to the **HireFlow** repository! This document contains step-by-step instructions on how to set up, configure, run, and extend the project for team collaboration—including guidelines for developing **Module 3**.
+Welcome to the **HireFlow** repository! This document contains step-by-step instructions on how to set up, configure, run, test, and extend the project for team collaboration—including guidelines for developing **Module 3**.
 
 ---
 
@@ -11,10 +11,14 @@ Welcome to the **HireFlow** repository! This document contains step-by-step inst
    - [Backend Setup (FastAPI)](#1-backend-setup-fastapi)
    - [Frontend Setup (React + Vite)](#2-frontend-setup-react--vite)
 4. [Environment & API Credentials Setup](#-environment--api-credentials-setup)
-5. [Guide for Building Module 3](#-guide-for-building-module-3)
+5. [End-to-End Testing & Verification Guide](#-end-to-end-testing--verification-guide)
+   - [Module 1: Authentication & Roles](#module-1-authentication--roles)
+   - [Module 2: Job CRUD, Resume Upload & Applications](#module-2-job-crud-resume-upload--applications)
+   - [Module 3: AI Screening Pipeline (Textract + LLM + LangGraph)](#module-3-ai-screening-pipeline-textract--llm--langgraph)
+6. [Guide for Building Module 3](#-guide-for-building-module-3)
    - [Backend Development Workflow](#a-backend-development-workflow)
    - [Frontend Development Workflow](#b-frontend-development-workflow)
-6. [Git Collaboration Workflow](#-git-collaboration-workflow)
+7. [Git Collaboration Workflow](#-git-collaboration-workflow)
 
 ---
 
@@ -34,6 +38,7 @@ HireFlow Project/
 │   ├── auth.py             # Authentication & JWT utilities
 │   ├── database.py         # MongoDB connection setup
 │   ├── models.py           # Pydantic data schemas
+│   ├── requirements.txt    # Python dependencies
 │   ├── .env                # Local environment variables (DO NOT COMMIT)
 │   └── .env.example        # Environment variable template
 └── frontend/
@@ -81,7 +86,7 @@ Make sure you have the following installed on your machine:
 
 3. Install required Python packages:
    ```bash
-   pip install fastapi uvicorn motor certifi python-dotenv pyjwt passlib[bcrypt] python-multipart pydantic
+   pip install -r requirements.txt
    ```
 
 4. Set up environment variables (see [Environment Credentials Setup](#-environment--api-credentials-setup)).
@@ -144,6 +149,67 @@ OPENAI_API_KEY=your_openai_api_key
 
 > ⚠️ **IMPORTANT SECURITY NOTICE**:
 > Never commit `.env` files containing actual passwords or secret keys to GitHub. Ensure `.env` is listed in your `.gitignore`.
+
+---
+
+## 🧪 End-to-End Testing & Verification Guide
+
+Follow these testing steps to verify each module of the application:
+
+### Module 1: Authentication & Roles
+
+1. **Register HR Account**:
+   - Go to **Register** → Fill name, email (`hr@test.com`), password (`123456`), and select role **HR**.
+   - Confirm redirect to Login / HR Dashboard.
+
+2. **Register Candidate Account**:
+   - Open Incognito mode (or Logout) → Register candidate (`candidate@test.com`), password (`123456`), and select role **Candidate**.
+
+3. **Verify Auth Guards**:
+   - Log in as Candidate → Try visiting HR routes (or posting a job) → Should block/hide HR controls.
+
+---
+
+### Module 2: Job CRUD, Resume Upload & Applications
+
+1. **Post a Job (as HR)**:
+   - Log in as `hr@test.com`.
+   - Go to **Job Postings** → Click **"Post New Job"**.
+   - **Title**: Senior Python Engineer
+   - **Description**: Looking for a Python expert with 3+ years experience in FastAPI, React, and AWS S3.
+   - **Must-Have Skills**: Python, FastAPI, React
+   - **Nice-to-Have Skills**: AWS, Docker
+   - **Experience**: 3+ years
+   - Click **Submit** → Confirm job appears under Job Postings.
+
+2. **Upload Resume & Apply (as Candidate)**:
+   - Log in as `candidate@test.com`.
+   - Go to **Candidate Dashboard** → **Upload Resume** → Select a PDF/DOCX resume file.
+   - Confirm resume uploads successfully (lands in AWS S3 / storage).
+   - Go to **Browse Jobs** → Find *Senior Python Engineer* → Click **Apply** → Select uploaded resume → Submit.
+   - Confirm status changes to **Applied**.
+
+---
+
+### Module 3: AI Screening Pipeline (Textract + LLM + LangGraph)
+
+1. **Trigger AI Screening (as HR)**:
+   - Log in back as `hr@test.com`.
+   - Go to **Job Postings** → Click **Applicants** on *Senior Python Engineer*.
+   - You should see `candidate@test.com` in the list with their uploaded resume.
+   - Click the **"Run AI Screen"** button.
+
+2. **Verify AI Agent Execution & Results**:
+   - Watch the status badge: `Queued` ➔ `Running…` ➔ `Screened`.
+   - Once completed, the overall score (e.g., `82/100`) and sub-score breakdown (Skills, Experience, Projects) will appear.
+   - Click **"View Report"** to open the **Evidence Modal**:
+     - **Overview tab**: Check AI reasoning, strengths, weaknesses, and missing skills.
+     - **Evidence tab**: Check quotes extracted by agents.
+     - **Fairness tab**: Confirm PII fields (name, email, institution) were stripped by the Bias Guardrail agent.
+
+3. **Update Candidate Stage**:
+   - In Applicants View, change stage dropdown to **Shortlisted** or **Hired**.
+   - Log in as Candidate → Check **Notifications** tab to confirm real-time notification received!
 
 ---
 

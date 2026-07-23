@@ -23,7 +23,7 @@ export const createJob = (data) => API.post('/jobs', data);
 export const updateJob = (id, data) => API.put(`/jobs/${id}`, data);
 export const deleteJob = (id) => API.delete(`/jobs/${id}`);
 
-// Resumes
+// Resumes (now S3-backed)
 export const uploadResume = (formData) => API.post('/resumes/upload', formData, {
   headers: { 'Content-Type': 'multipart/form-data' },
 });
@@ -38,5 +38,12 @@ export const updateApplicationStatus = (id, status) => API.patch(`/applications/
 // Notifications
 export const getMyNotifications = () => API.get('/notifications/me');
 export const markNotificationRead = (id) => API.patch(`/notifications/${id}/read`);
+
+// --- Module 3: AI Screening ---
+export const triggerScreening = (payload) => API.post('/screening/run', payload);
+export const getScreeningResults = (jobId) => API.get(`/screening/results/${jobId}`);
+export const getScreeningResultDetail = (resultId) => API.get(`/screening/result/${resultId}`);
+export const getAuditLogs = (resultId) => API.get(`/screening/audit/${resultId}`);
+export const getParsedResume = (resumeId) => API.get(`/screening/parsed-resume/${resumeId}`);
 
 export default API;

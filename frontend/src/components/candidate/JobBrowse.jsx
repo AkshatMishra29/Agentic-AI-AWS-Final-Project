@@ -24,7 +24,8 @@ const JobBrowse = () => {
     try {
       const [jobsRes, appsRes] = await Promise.all([getJobs(), getMyApplications()]);
       setJobs(jobsRes.data || []);
-      const ids = new Set((appsRes.data || []).map(a => a.job_id));
+      const activeApps = (appsRes.data || []).filter(a => a.status !== 'rejected');
+      const ids = new Set(activeApps.map(a => a.job_id));
       setAppliedJobIds(ids);
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to load jobs'));

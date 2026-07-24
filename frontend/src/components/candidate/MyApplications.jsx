@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/Card';
-import { FiBriefcase, FiMapPin, FiCalendar, FiFileText, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiBriefcase, FiMapPin, FiCalendar, FiFileText, FiChevronDown, FiChevronUp, FiVideo } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import { getMyApplications } from '../../api';
 
@@ -8,18 +8,17 @@ import { getMyApplications } from '../../api';
 const STAGES = [
   { key: 'applied',        label: 'Applied',            desc: 'Application submitted' },
   { key: 'under_review',   label: 'Under Review',       desc: 'HR is reviewing your profile' },
-  { key: 'shortlisted',    label: 'Shortlisted',        desc: 'You\'re on the shortlist!' },
-  { key: 'interview',      label: 'Interview Scheduled', desc: 'Interview scheduled' },
+  { key: 'shortlisted',    label: 'Shortlisted',        desc: 'You\'ve been shortlisted! Check interview details below.' },
   { key: 'hired',          label: 'Offer Extended',     desc: 'Congratulations! 🎉' },
 ];
 
-const STAGE_ORDER = ['applied', 'under_review', 'shortlisted', 'interview', 'hired'];
+const STAGE_ORDER = ['applied', 'under_review', 'shortlisted', 'hired'];
 
 const statusMeta = {
   applied:      { color: 'bg-blue-500',    text: 'Applied',          cls: 'text-blue-600 bg-blue-50 dark:bg-blue-950/40 border-blue-200' },
   under_review: { color: 'bg-amber-500',   text: 'Under Review',     cls: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200' },
-  shortlisted:  { color: 'bg-indigo-500',  text: 'Shortlisted',      cls: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200' },
-  interview:    { color: 'bg-purple-500',  text: 'Interview',        cls: 'text-purple-600 bg-purple-50 dark:bg-purple-950/40 border-purple-200' },
+  shortlisted:  { color: 'bg-indigo-500',  text: 'Shortlisted 🎉',    cls: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200' },
+  interview:    { color: 'bg-indigo-500',  text: 'Shortlisted 🎉',    cls: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200' },
   hired:        { color: 'bg-emerald-500', text: 'Hired 🎉',         cls: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200' },
   rejected:     { color: 'bg-red-400',     text: 'Not Selected',     cls: 'text-red-600 bg-red-50 dark:bg-red-950/40 border-red-200' },
 };
@@ -31,7 +30,8 @@ const ApplicationCard = ({ app }) => {
   const meta = statusMeta[app.status] || statusMeta['applied'];
   const isRejected = app.status === 'rejected';
 
-  const currentStageIdx = isRejected ? -1 : STAGE_ORDER.indexOf(app.status);
+  const statusKey = app.status === 'interview' ? 'shortlisted' : app.status;
+  const currentStageIdx = isRejected ? -1 : STAGE_ORDER.indexOf(statusKey);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-md transition">
@@ -105,6 +105,42 @@ const ApplicationCard = ({ app }) => {
               <div className="text-xs text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/40 rounded-xl py-2.5 px-4">
                 {STAGES[currentStageIdx]?.desc || 'Application in progress'}
               </div>
+
+              {/* Shortlisted / Scheduled Interview Notification Banner */}
+              {(app.status === 'shortlisted' || app.interview) && (
+                <div className="mt-3.5 p-4 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/60 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center">
+                      <FiCalendar className="mr-1.5 text-indigo-600 dark:text-indigo-400 w-4 h-4" />
+                      🎉 Congratulations! You have been shortlisted!
+                    </p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 uppercase">
+                      Interview Scheduled
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-indigo-800 dark:text-indigo-300 space-y-1 bg-white/70 dark:bg-gray-800/60 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/50">
+                    <p><strong>Date & Time:</strong> {app.interview?.scheduled_time || 'Schedule details sent via email'}</p>
+                    <p><strong>Format:</strong> Video Call (Google Meet)</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 pt-1">
+                      Great news! You have been shortlisted for the <strong>{job.title}</strong> position. Please join the video call at the scheduled time.
+                    </p>
+                  </div>
+
+                  {app.interview?.meet_link && (
+                    <div className="pt-1 flex justify-end">
+                      <a
+                        href={app.interview.meet_link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-sm"
+                      >
+                        <FiVideo className="mr-1.5 w-4 h-4" /> Join Google Meet Interview
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -133,8 +169,9 @@ const MyApplications = () => {
     fetch();
   }, []);
 
-  const active = applications.filter(a => a.status !== 'rejected').length;
-  const hired = applications.filter(a => a.status === 'hired').length;
+  const visibleApplications = applications.filter(a => a.status !== 'rejected');
+  const active = visibleApplications.length;
+  const hired = visibleApplications.filter(a => a.status === 'hired').length;
 
   return (
     <div className="space-y-5">
@@ -142,22 +179,22 @@ const MyApplications = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">My Applications</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {applications.length} total · {active} active · {hired} hired
+            {visibleApplications.length} total · {active} active · {hired} hired
           </p>
         </div>
       </div>
 
       {loading ? (
         <div className="py-16 text-center text-sm text-gray-500 animate-pulse">Loading applications...</div>
-      ) : applications.length === 0 ? (
+      ) : visibleApplications.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
           <FiBriefcase className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200">No Applications Yet</h3>
+          <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200">No Active Applications</h3>
           <p className="text-xs text-gray-500 mt-1">Browse open positions and apply to get started.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {applications.map(app => <ApplicationCard key={app.id} app={app} />)}
+          {visibleApplications.map(app => <ApplicationCard key={app.id} app={app} />)}
         </div>
       )}
     </div>

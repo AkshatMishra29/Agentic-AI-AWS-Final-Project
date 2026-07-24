@@ -9,9 +9,9 @@ from bson import ObjectId
 from database import db
 from models import UserCreate, UserLogin, JobCreate, JobUpdate, ApplicationCreate, ApplicationStatusUpdate
 from auth import hash_password, verify_password, create_token, get_current_user, require_role
-from routers import s3_upload, screening
+from routers import s3_upload, screening, interviews, assistant
 
-app = FastAPI(title="HireFlow API - Agentic Recruitment Pipeline", version="3.0.0")
+app = FastAPI(title="HireFlow API - Agentic Recruitment Pipeline", version="4.0.0")
 
 # Enable CORS for React frontend
 app.add_middleware(
@@ -22,9 +22,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Register Module 3 Routers ---
+# --- Register Module 3 & 4 Routers ---
 app.include_router(s3_upload.router)    # /resumes/upload, /resumes/me
-app.include_router(screening.router)   # /screening/run, /screening/results/{job_id}, etc.
+app.include_router(screening.router)   # /screening/run, /screening/results/{job_id}
+app.include_router(interviews.router)  # /interviews/schedule, /interviews/candidate/me
+app.include_router(assistant.router)   # /assistant/faq, /assistant/resume-advice, /assistant/interview-coach, /assistant/company-docs
 
 
 def serialize_doc(doc):
@@ -315,6 +317,17 @@ async def get_my_applications(current_user: dict = Depends(require_role(["candid
             resume = await db.resumes.find_one({"_id": ObjectId(app_item["resume_id"])})
             if resume:
                 app_item["resume"] = serialize_doc(resume)
+        
+        # Attach scheduled interview details if present (match by candidate + job or application_id)
+        interview = await db.interviews.find_one({
+            "$or": [
+                {"application_id": app_item["id"]},
+                {"candidate_id": current_user["email"], "job_id": app_item["job_id"]}
+            ]
+        })
+        if interview:
+            app_item["interview"] = serialize_doc(interview)
+
         applications.append(app_item)
     return applications
 

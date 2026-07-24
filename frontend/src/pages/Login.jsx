@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthForm from '../components/auth/AuthForm';
-import { loginUser } from '../api';
+import { loginUser, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { FiBriefcase, FiCheckCircle } from 'react-icons/fi';
 
 const Login = () => {
   const [loading, setLoading] = React.useState(false);
+  const [serverError, setServerError] = React.useState('');
   const { user, login, initializing } = useAuth();
   const navigate = useNavigate();
 
@@ -24,6 +25,7 @@ const Login = () => {
 
   const handleLogin = async (data) => {
     setLoading(true);
+    setServerError('');
     try {
       const res = await loginUser(data);
       login(res.data, data.email);
@@ -35,7 +37,9 @@ const Login = () => {
         navigate('/candidate/dashboard', { replace: true });
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Authentication failed. Please check credentials.');
+      const msg = getErrorMessage(err, 'Invalid email or password. Please try again.');
+      setServerError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -103,7 +107,7 @@ const Login = () => {
             </p>
           </div>
 
-          <AuthForm type="login" onSubmit={handleLogin} isLoading={loading} />
+          <AuthForm type="login" onSubmit={handleLogin} isLoading={loading} serverError={serverError} />
 
           <p className="text-center text-sm text-gray-500 dark:text-gray-400 pt-4">
             Don't have an account?{' '}

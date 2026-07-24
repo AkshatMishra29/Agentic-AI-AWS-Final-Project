@@ -5,10 +5,10 @@ import {
   FiArrowLeft, FiFileText, FiDownload, FiUser, FiMail, FiCalendar,
   FiZap, FiRefreshCw, FiSearch, FiFilter, FiChevronDown, FiChevronUp,
   FiCheckCircle, FiAlertTriangle, FiXCircle, FiCpu, FiShield, FiPieChart,
-  FiChevronLeft, FiChevronRight, FiUsers
+  FiChevronLeft, FiChevronRight, FiUsers, FiVideo, FiX
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import { getJobApplications, updateApplicationStatus, triggerBulkScreening } from '../../api';
+import { getJobApplications, updateApplicationStatus, triggerBulkScreening, scheduleInterview, getErrorMessage } from '../../api';
 import ScreeningPanel from './ScreeningPanel';
 import EvidenceModal from './EvidenceModal';
 
@@ -67,7 +67,7 @@ const SkeletonCard = () => (
 );
 
 // ─── Expandable Applicant Card ───────────────────────────────────────────────
-const ApplicantCard = ({ app, onStatusChange, onOpenEvidence, fetchApplications }) => {
+const ApplicantCard = ({ app, onStatusChange, onOpenEvidence, fetchApplications, onSchedule }) => {
   const [expanded, setExpanded] = useState(false);
   const screening = app.screening;
   const isScreened = screening && screening.status === 'completed';
@@ -112,6 +112,16 @@ const ApplicantCard = ({ app, onStatusChange, onOpenEvidence, fetchApplications 
             </select>
             <FiChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
           </div>
+
+          {/* Schedule Interview Button */}
+          <button
+            onClick={() => onSchedule(app)}
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl hover:bg-indigo-100 transition shadow-sm cursor-pointer"
+            title="Schedule Google Meet Interview"
+          >
+            <FiCalendar className="w-3.5 h-3.5" />
+            <span>Schedule</span>
+          </button>
 
           {/* AI Screening Status */}
           <ScreeningPanel application={app} onScreeningStarted={fetchApplications} />
@@ -319,6 +329,101 @@ const FairnessModal = ({ applications, onClose }) => {
   );
 };
 
+// ─── Schedule Interview Modal ────────────────────────────────────────────────
+const ScheduleModal = ({ app, onClose, onSuccess }) => {
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Compute minimum datetime string for HTML5 datetime-local input (current local time)
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  const minDateTime = now.toISOString().slice(0, 16);
+
+  const handleScheduleSubmit = async (e) => {
+    e.preventDefault();
+    if (!scheduledTime) {
+      toast.error('Please pick a date and time');
+      return;
+    }
+
+    const selectedDate = new Date(scheduledTime);
+    if (selectedDate < new Date()) {
+      toast.error('Cannot schedule an interview in the past. Please select a future date & time.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formatted = selectedDate.toLocaleString('en-IN', {
+        dateStyle: 'medium', timeStyle: 'short'
+      });
+      await scheduleInterview({
+        application_id: app.id,
+        scheduled_time: formatted,
+      });
+      onSuccess();
+      onClose();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to schedule interview'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/70 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold border border-indigo-100 dark:border-indigo-900/50">
+              <FiCalendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Schedule Interview</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{app.candidate_name} ({app.candidate_id})</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+            <FiX className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleScheduleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+              Select Date & Time *
+            </label>
+            <input
+              type="datetime-local"
+              min={minDateTime}
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              required
+            />
+            <p className="text-[10px] text-gray-400 mt-1">Interviews cannot be scheduled in the past.</p>
+          </div>
+
+          <div className="bg-indigo-50/60 dark:bg-indigo-950/30 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-1 text-xs text-indigo-800 dark:text-indigo-200">
+            <p className="font-bold flex items-center"><FiVideo className="mr-1.5 w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Instant Google Meet Generation</p>
+            <p className="text-[11px] opacity-85 leading-relaxed">A unique Google Meet URL will be created and an automated confirmation email sent to the candidate.</p>
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <Button variant="secondary" size="sm" type="button" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" type="submit" isLoading={loading}>
+              Confirm & Send Invite
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main ApplicantsView Component ───────────────────────────────────────────
 const ApplicantsView = ({ job, onBack }) => {
   const [applications, setApplications] = useState([]);
@@ -336,6 +441,7 @@ const ApplicantsView = ({ job, onBack }) => {
   const [selectedResultForEvidence, setSelectedResultForEvidence] = useState(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [showFairnessModal, setShowFairnessModal] = useState(false);
+  const [schedulingApp, setSchedulingApp] = useState(null);
 
   const fetchApplications = async () => {
     setLoading(true);
@@ -497,6 +603,7 @@ const ApplicantsView = ({ job, onBack }) => {
                 setSelectedCandidateId(cid);
               }}
               fetchApplications={fetchApplications}
+              onSchedule={(targetApp) => setSchedulingApp(targetApp)}
             />
           ))}
         </div>
@@ -527,6 +634,18 @@ const ApplicantsView = ({ job, onBack }) => {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Schedule Interview Modal */}
+      {schedulingApp && (
+        <ScheduleModal
+          app={schedulingApp}
+          onClose={() => setSchedulingApp(null)}
+          onSuccess={() => {
+            fetchApplications();
+            toast.success('Interview scheduled! Email sent to candidate.');
+          }}
+        />
       )}
 
       {/* Evidence Modal */}

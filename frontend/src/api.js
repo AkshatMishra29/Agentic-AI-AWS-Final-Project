@@ -5,7 +5,7 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((req) => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   if (token) {
     req.headers.Authorization = `Bearer ${token}`;
   }
@@ -17,9 +17,8 @@ API.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('email');
+      sessionStorage.clear();
+      localStorage.clear();
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -82,5 +81,21 @@ export const getScreeningResults = (jobId) => API.get(`/screening/results/${jobI
 export const getScreeningResultDetail = (resultId) => API.get(`/screening/result/${resultId}`);
 export const getAuditLogs = (resultId) => API.get(`/screening/audit/${resultId}`);
 export const getParsedResume = (resumeId) => API.get(`/screening/parsed-resume/${resumeId}`);
+
+// --- Module 4: Interviews & AI Assistant Suite ---
+export const scheduleInterview = (data) => API.post('/interviews/schedule', data);
+export const getMyInterviews = () => API.get('/interviews/candidate/me');
+export const getHrInterviews = () => API.get('/interviews/hr/all');
+export const getJobInterviews = (jobId) => API.get(`/interviews/job/${jobId}`);
+export const rescheduleInterview = (id, data) => API.patch(`/interviews/${id}/reschedule`, data);
+export const deleteInterview = (id) => API.delete(`/interviews/${id}`);
+
+export const addCompanyDoc = (data) => API.post('/assistant/company-docs', data);
+export const getCompanyDocs = () => API.get('/assistant/company-docs');
+export const deleteCompanyDoc = (id) => API.delete(`/assistant/company-docs/${id}`);
+
+export const askFaqAgent = (question) => API.post('/assistant/faq', { question });
+export const getResumeAdvice = (data) => API.post('/assistant/resume-advice', data);
+export const getInterviewPrep = (data) => API.post('/assistant/interview-coach', data);
 
 export default API;

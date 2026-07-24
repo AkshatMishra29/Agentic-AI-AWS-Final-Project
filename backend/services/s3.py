@@ -27,26 +27,38 @@ def get_s3_client():
 
 def upload_file_to_s3(file_bytes: bytes, s3_key: str, content_type: str = "application/octet-stream") -> dict:
     """Upload bytes to S3. Returns dict with s3_key and public URL."""
-    s3 = get_s3_client()
-    s3.put_object(
-        Bucket=S3_BUCKET_NAME,
-        Key=s3_key,
-        Body=file_bytes,
-        ContentType=content_type,
-    )
-    url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
-    return {"s3_key": s3_key, "s3_url": url}
+    bucket_name = S3_BUCKET_NAME or "hireflow-resumes"
+    try:
+        s3 = get_s3_client()
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=file_bytes,
+            ContentType=content_type,
+        )
+        url = f"https://{bucket_name}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+        return {"s3_key": s3_key, "s3_url": url}
+    except Exception as e:
+        print(f"[S3 Upload Warning]: Could not upload to S3: {e}")
+        return {"s3_key": s3_key, "s3_url": ""}
 
 
 def get_presigned_url(s3_key: str, expiry_seconds: int = 3600) -> str:
     """Generate a pre-signed URL for temporary access to a private S3 object."""
-    s3 = get_s3_client()
-    url = s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key},
-        ExpiresIn=expiry_seconds,
-    )
-    return url
+    if not s3_key:
+        return ""
+    bucket_name = S3_BUCKET_NAME or "hireflow-resumes"
+    try:
+        s3 = get_s3_client()
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": s3_key},
+            ExpiresIn=expiry_seconds,
+        )
+        return url
+    except Exception as e:
+        print(f"[S3 Presigned URL Warning]: {e}")
+        return ""
 
 
 def download_file_from_s3(s3_key: str) -> bytes:

@@ -13,14 +13,24 @@ from routers import s3_upload, screening, interviews, assistant
 
 app = FastAPI(title="HireFlow API - Agentic Recruitment Pipeline", version="4.0.0")
 
-# Enable CORS for React frontend
+# Enable CORS for React frontend (supports custom FRONTEND_URL env)
+frontend_origin = os.getenv("FRONTEND_URL", "").strip()
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]
+if frontend_origin and frontend_origin not in allowed_origins:
+    allowed_origins.append(frontend_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_db_indexing():
+    from database import create_db_indexes
+    await create_db_indexes()
 
 # --- Register Module 3 & 4 Routers ---
 app.include_router(s3_upload.router)    # /resumes/upload, /resumes/me

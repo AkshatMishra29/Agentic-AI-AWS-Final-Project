@@ -11,7 +11,7 @@ from database import db
 load_dotenv()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = os.getenv("JWT_SECRET")
+SECRET_KEY = os.getenv("JWT_SECRET") or "hireflow_jwt_secret_key_fallback_2026"
 ALGORITHM = "HS256"
 
 security = HTTPBearer()

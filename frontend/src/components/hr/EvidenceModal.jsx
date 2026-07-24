@@ -59,8 +59,13 @@ const EvidenceModal = ({ result, candidateId, onClose }) => {
               {scoreInfo.label}
             </span>
           </div>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50">
-            <FiX className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition cursor-pointer"
+            title="Close Report"
+          >
+            <FiX className="w-4 h-4" />
+            <span>Close</span>
           </button>
         </div>
 
@@ -200,6 +205,17 @@ const EvidenceModal = ({ result, candidateId, onClose }) => {
               </Card>
             </div>
           )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="flex justify-end p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="flex items-center space-x-1.5 px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-xl transition cursor-pointer"
+          >
+            <FiX className="w-4 h-4" />
+            <span>Close Analysis Report</span>
+          </button>
         </div>
       </div>
     </div>

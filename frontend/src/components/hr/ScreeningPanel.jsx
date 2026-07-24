@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { FiCpu, FiCheckCircle, FiClock, FiAlertCircle, FiZap } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import { triggerScreening } from '../../api';
+import { triggerScreening, getErrorMessage } from '../../api';
 
 const ScreeningPanel = ({ application, onScreeningStarted }) => {
   const [loading, setLoading] = useState(false);
@@ -44,7 +44,7 @@ const ScreeningPanel = ({ application, onScreeningStarted }) => {
       toast.success('AI Screening pipeline started!');
       if (onScreeningStarted) onScreeningStarted();
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Failed to start screening';
+      const msg = getErrorMessage(err, 'Failed to start screening');
       if (msg.includes('already exists')) {
         toast('Screening already in progress for this candidate.', { icon: '⚠️' });
         if (onScreeningStarted) onScreeningStarted();

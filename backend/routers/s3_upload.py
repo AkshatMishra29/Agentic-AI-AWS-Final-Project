@@ -24,10 +24,18 @@ async def upload_resume_to_s3(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_role(["candidate"]))
 ):
-    """Upload resume file to S3 and store metadata in MongoDB."""
+    """Upload resume file to S3 and store metadata in MongoDB. Prevents duplicate uploads with same filename."""
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Invalid file type. Allowed: PDF, DOCX, TXT")
+
+    # Prevent duplicate resume filename for the same candidate
+    existing = await db.resumes.find_one({
+        "candidate_id": current_user["email"],
+        "filename": file.filename
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail=f"A resume named '{file.filename}' is already uploaded. Please delete the existing version first or use a different file.")
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_email = current_user["email"].replace("@", "_").replace(".", "_")
@@ -77,3 +85,31 @@ async def get_my_resumes(current_user: dict = Depends(require_role(["candidate"]
                 item["presigned_url"] = item.get("file_url", "")
         resumes.append(item)
     return resumes
+
+
+@router.delete("/{resume_id}")
+async def delete_resume(
+    resume_id: str,
+    current_user: dict = Depends(require_role(["candidate"]))
+):
+    """Delete a candidate resume document from MongoDB and S3."""
+    from bson import ObjectId
+    from services.s3 import delete_file_from_s3
+
+    if not ObjectId.is_valid(resume_id):
+        raise HTTPException(status_code=400, detail="Invalid Resume ID format")
+
+    doc = await db.resumes.find_one({
+        "_id": ObjectId(resume_id),
+        "candidate_id": current_user["email"]
+    })
+    if not doc:
+        raise HTTPException(status_code=404, detail="Resume document not found")
+
+    # Delete from S3
+    if doc.get("s3_key"):
+        delete_file_from_s3(doc["s3_key"])
+
+    # Delete metadata from MongoDB
+    await db.resumes.delete_one({"_id": ObjectId(resume_id)})
+    return {"message": "Resume deleted successfully"}

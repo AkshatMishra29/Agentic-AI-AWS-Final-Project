@@ -20,20 +20,30 @@ def serialize_doc(doc):
 
 async def run_pipeline_task(screening_result_id: str, initial_state: dict):
     """Background task: run the LangGraph pipeline and update MongoDB."""
+    print(f"[Screening] Starting pipeline for result_id={screening_result_id}")
     try:
         await db.screening_results.update_one(
             {"_id": ObjectId(screening_result_id)},
             {"$set": {"status": "running", "updated_at": datetime.utcnow().isoformat()}}
         )
-        # LangGraph invoke (sync agents wrapped in thread for async compat)
-        loop = asyncio.get_event_loop()
-        final_state = await loop.run_in_executor(
-            None,
-            lambda: screening_pipeline.invoke(initial_state)
-        )
-        print(f"[Screening] Pipeline complete for result_id={screening_result_id}, score={final_state.get('overall_score')}")
+        # LangGraph invoke runs sync — run safely in thread pool without loop conflict
+        import concurrent.futures
+        def _invoke_graph():
+            return screening_pipeline.invoke(initial_state)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            loop = asyncio.get_running_loop()
+            final_state = await loop.run_in_executor(pool, _invoke_graph)
+        errors = final_state.get("errors", [])
+        score = final_state.get("overall_score", 0)
+        if errors:
+            print(f"[Screening] Pipeline finished with {len(errors)} error(s): {errors}")
+        else:
+            print(f"[Screening] Pipeline complete. result_id={screening_result_id}, score={score}")
     except Exception as e:
-        print(f"[Screening] Pipeline FAILED: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[Screening] Pipeline CRASHED: {e}\n{tb}")
         await db.screening_results.update_one(
             {"_id": ObjectId(screening_result_id)},
             {"$set": {"status": "failed", "errors": [str(e)], "updated_at": datetime.utcnow().isoformat()}}
@@ -70,14 +80,15 @@ async def trigger_screening(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    # Check if already screened (avoid duplicates)
+    # Check if already screened (allow retry if failed)
     existing = await db.screening_results.find_one({
         "job_id": job_id,
         "resume_id": resume_id,
         "status": {"$in": ["pending", "running", "completed"]}
     })
     if existing:
-        return {"message": "Screening already exists", "screening_result_id": str(existing["_id"]), "status": existing["status"]}
+        # Delete old record so clean new run can happen
+        await db.screening_results.delete_one({"_id": existing["_id"]})
 
     # Create pending screening_result
     now = datetime.utcnow().isoformat()
@@ -117,6 +128,91 @@ async def trigger_screening(
         "message": "AI screening pipeline started",
         "screening_result_id": screening_result_id,
         "status": "pending"
+    }
+
+
+@router.post("/run-all/{job_id}")
+async def run_all_screening(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(require_role(["hr"]))
+):
+    """
+    Bulk trigger AI screening for all applicants of a job who haven't completed screening.
+    """
+    if not ObjectId.is_valid(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job_id format")
+
+    job = await db.jobs.find_one({"_id": ObjectId(job_id)})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    cursor = db.applications.find({"job_id": job_id})
+    applications = await cursor.to_list(1000)
+
+    triggered_count = 0
+    now = datetime.utcnow().isoformat()
+
+    for app_item in applications:
+        resume_id = app_item.get("resume_id")
+        candidate_id = app_item.get("candidate_id")
+
+        if not resume_id or not ObjectId.is_valid(resume_id):
+            continue
+
+        existing = await db.screening_results.find_one({
+            "job_id": job_id,
+            "resume_id": resume_id,
+            "status": "completed"
+        })
+        if existing:
+            continue
+
+        resume = await db.resumes.find_one({"_id": ObjectId(resume_id)})
+        if not resume:
+            continue
+
+        # Clean old incomplete result
+        await db.screening_results.delete_many({
+            "job_id": job_id,
+            "resume_id": resume_id
+        })
+
+        screening_doc = {
+            "job_id": job_id,
+            "resume_id": resume_id,
+            "candidate_id": candidate_id,
+            "status": "pending",
+            "created_at": now,
+            "updated_at": now,
+        }
+        result = await db.screening_results.insert_one(screening_doc)
+        screening_result_id = str(result.inserted_id)
+
+        initial_state = {
+            "job_id": job_id,
+            "resume_id": resume_id,
+            "candidate_id": candidate_id,
+            "screening_result_id": screening_result_id,
+            "job_title": job.get("title", ""),
+            "job_description": job.get("description", ""),
+            "job_must_have_skills": job.get("must_have_skills", []),
+            "job_nice_to_have_skills": job.get("nice_to_have_skills", []),
+            "job_experience_required": job.get("experience_required", ""),
+            "job_education": job.get("education", ""),
+            "s3_key": resume.get("s3_key", ""),
+            "s3_url": resume.get("file_url", ""),
+            "audit_entries": [],
+            "errors": [],
+        }
+
+        background_tasks.add_task(run_pipeline_task, screening_result_id, initial_state)
+        triggered_count += 1
+
+    return {
+        "message": f"Triggered AI screening for {triggered_count} applicant(s)",
+        "triggered_count": triggered_count,
+        "total_applicants": len(applications)
     }
 
 

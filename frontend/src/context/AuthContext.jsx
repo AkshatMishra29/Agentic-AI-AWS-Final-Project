@@ -4,14 +4,17 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true); // ← prevents premature redirect
 
   useEffect(() => {
+    // Read session from localStorage synchronously before any route renders
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
     const email = localStorage.getItem('email');
     if (token && role) {
       setUser({ token, role, email });
     }
+    setInitializing(false); // ← signal: auth check done, safe to route
   }, []);
 
   const login = (data, email) => {
@@ -29,7 +32,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, initializing }}>
       {children}
     </AuthContext.Provider>
   );

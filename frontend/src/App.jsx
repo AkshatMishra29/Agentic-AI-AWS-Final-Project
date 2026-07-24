@@ -8,6 +8,7 @@ import CandidateDashboard from './pages/CandidateDashboard';
 import HRDashboard from './pages/HRDashboard';
 import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const RootRedirect = () => {
   const { user } = useAuth();
@@ -17,10 +18,11 @@ const RootRedirect = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
-      <Router>
-        <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+        <Router>
+          <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -39,8 +41,9 @@ function App() {
 
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </Router>
-    </AuthProvider>
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

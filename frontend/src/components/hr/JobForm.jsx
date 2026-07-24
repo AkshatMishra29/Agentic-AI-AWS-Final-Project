@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { FiX, FiPlus, FiTag } from 'react-icons/fi';
+import { FiX, FiPlus, FiTag, FiUploadCloud, FiZap, FiFileText } from 'react-icons/fi';
 import toast from 'react-hot-toast';
-import { createJob, updateJob } from '../../api';
+import { createJob, updateJob, parseJobDescription, getErrorMessage } from '../../api';
 
 const JobForm = ({ initialData = null, onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -20,6 +20,7 @@ const JobForm = ({ initialData = null, onClose, onSuccess }) => {
   const [mustInput, setMustInput] = useState('');
   const [niceInput, setNiceInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [parsingJd, setParsingJd] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -35,6 +36,43 @@ const JobForm = ({ initialData = null, onClose, onSuccess }) => {
       setNiceToHaveSkills(initialData.nice_to_have_skills || []);
     }
   }, [initialData]);
+
+  const handleJdFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setParsingJd(true);
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const res = await parseJobDescription(fd);
+      const data = res.data;
+      
+      setFormData((prev) => ({
+        ...prev,
+        title: data.title || prev.title,
+        description: data.description || prev.description,
+        experience_required: data.experience_required || prev.experience_required,
+        education: data.education || prev.education,
+        location: data.location || prev.location,
+        salary_range: data.salary_range || prev.salary_range,
+      }));
+
+      if (data.must_have_skills && Array.isArray(data.must_have_skills)) {
+        setMustHaveSkills(data.must_have_skills);
+      }
+      if (data.nice_to_have_skills && Array.isArray(data.nice_to_have_skills)) {
+        setNiceToHaveSkills(data.nice_to_have_skills);
+      }
+
+      toast.success('✨ Auto-filled job details & skills from uploaded JD!');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to parse JD file'));
+    } finally {
+      setParsingJd(false);
+    }
+  };
 
   const addSkill = (type) => {
     if (type === 'must') {
@@ -82,7 +120,7 @@ const JobForm = ({ initialData = null, onClose, onSuccess }) => {
       onSuccess();
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to save job');
+      toast.error(getErrorMessage(err, 'Failed to save job'));
     } finally {
       setLoading(false);
     }
@@ -99,104 +137,146 @@ const JobForm = ({ initialData = null, onClose, onSuccess }) => {
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50"
           >
-            <FiX className="w-6 h-6" />
+            <FiX className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          {/* AI JD Upload Dropzone */}
+          {!initialData && (
+            <div className="p-4 rounded-xl border-2 border-dashed border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 text-center relative">
+              <div className="flex flex-col items-center justify-center space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 flex items-center justify-center">
+                  <FiZap className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-gray-900 dark:text-white">
+                    {parsingJd ? '✨ AI Extractor Analyzing JD Document...' : 'Upload JD Document for Instant AI Auto-Fill'}
+                  </p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    Upload PDF, DOCX, or TXT file to automatically extract title, skills, experience & compensation
+                  </p>
+                </div>
+                <label className="inline-flex items-center px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl cursor-pointer transition shadow-sm">
+                  <FiUploadCloud className="mr-1.5 w-4 h-4" />
+                  <span>{parsingJd ? 'Extracting...' : 'Upload JD File'}</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc,.txt"
+                    onChange={handleJdFileUpload}
+                    disabled={parsingJd}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Job Title *</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Job Title *
+            </label>
             <input
               type="text"
-              required
-              placeholder="e.g. Senior Fullstack Engineer"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              placeholder="e.g. Senior Frontend Engineer"
+              className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Description *</label>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Job Description *
+            </label>
             <textarea
-              required
               rows={4}
-              placeholder="Detailed responsibilities, expectations, and role description..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              placeholder="Detailed description of responsibilities and scope..."
+              className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              required
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Experience Required</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Experience Required
+              </label>
               <input
                 type="text"
-                placeholder="e.g. 3+ years"
                 value={formData.experience_required}
                 onChange={(e) => setFormData({ ...formData, experience_required: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="e.g. 3-5 years"
+                className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Education</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Education
+              </label>
               <input
                 type="text"
-                placeholder="e.g. B.S. in Computer Science"
                 value={formData.education}
                 onChange={(e) => setFormData({ ...formData, education: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="e.g. B.Tech in CS or equivalent"
+                className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Location</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Location
+              </label>
               <input
                 type="text"
-                placeholder="e.g. Remote / New York, NY"
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="e.g. Remote / Bangalore"
+                className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Salary Range</label>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                Salary Range (in ₹ LPA)
+              </label>
               <input
                 type="text"
-                placeholder="e.g. $120,000 - $150,000"
                 value={formData.salary_range}
                 onChange={(e) => setFormData({ ...formData, salary_range: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                placeholder="e.g. 15-22 LPA"
+                className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
 
-          {/* Must Have Skills Tag Input */}
+          {/* Must Have Skills */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Must-Have Skills</label>
-            <div className="flex gap-2 mb-2">
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Must-Have Skills
+            </label>
+            <div className="flex space-x-2 mb-2">
               <input
                 type="text"
-                placeholder="Add skill (e.g. React)"
                 value={mustInput}
                 onChange={(e) => setMustInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSkill('must'); } }}
-                className="flex-1 px-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                placeholder="Type skill and press Enter"
+                className="flex-1 px-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <Button type="button" size="sm" variant="secondary" onClick={() => addSkill('must')}>
-                <FiPlus className="w-4 h-4 mr-1" /> Add
+              <Button type="button" variant="secondary" size="sm" onClick={() => addSkill('must')}>
+                Add
               </Button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {mustHaveSkills.map((skill, idx) => (
-                <span key={idx} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  <FiTag className="w-3 h-3 mr-1" /> {skill}
-                  <button type="button" onClick={() => removeSkill('must', skill)} className="ml-1 text-indigo-500 hover:text-indigo-800">
+            <div className="flex flex-wrap gap-1">
+              {mustHaveSkills.map((s, idx) => (
+                <span key={idx} className="px-2 py-1 text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg flex items-center">
+                  {s}
+                  <button type="button" onClick={() => removeSkill('must', s)} className="ml-1 text-indigo-400 hover:text-red-500">
                     <FiX className="w-3 h-3" />
                   </button>
                 </span>
@@ -204,27 +284,29 @@ const JobForm = ({ initialData = null, onClose, onSuccess }) => {
             </div>
           </div>
 
-          {/* Nice Have Skills Tag Input */}
+          {/* Nice to Have Skills */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Nice-to-Have Skills</label>
-            <div className="flex gap-2 mb-2">
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Nice-to-Have Skills
+            </label>
+            <div className="flex space-x-2 mb-2">
               <input
                 type="text"
-                placeholder="Add skill (e.g. Docker)"
                 value={niceInput}
                 onChange={(e) => setNiceInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSkill('nice'); } }}
-                className="flex-1 px-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white"
+                placeholder="Type skill and press Enter"
+                className="flex-1 px-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <Button type="button" size="sm" variant="secondary" onClick={() => addSkill('nice')}>
-                <FiPlus className="w-4 h-4 mr-1" /> Add
+              <Button type="button" variant="secondary" size="sm" onClick={() => addSkill('nice')}>
+                Add
               </Button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {niceToHaveSkills.map((skill, idx) => (
-                <span key={idx} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                  <FiTag className="w-3 h-3 mr-1" /> {skill}
-                  <button type="button" onClick={() => removeSkill('nice', skill)} className="ml-1 text-purple-500 hover:text-purple-800">
+            <div className="flex flex-wrap gap-1">
+              {niceToHaveSkills.map((s, idx) => (
+                <span key={idx} className="px-2 py-1 text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg flex items-center">
+                  {s}
+                  <button type="button" onClick={() => removeSkill('nice', s)} className="ml-1 text-gray-400 hover:text-red-500">
                     <FiX className="w-3 h-3" />
                   </button>
                 </span>
@@ -233,11 +315,11 @@ const JobForm = ({ initialData = null, onClose, onSuccess }) => {
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-            <Button variant="secondary" onClick={onClose} type="button">
+            <Button type="button" variant="secondary" size="sm" onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" isLoading={loading}>
-              {initialData ? 'Update Posting' : 'Publish Job'}
+            <Button type="submit" variant="primary" size="sm" isLoading={loading}>
+              {initialData ? 'Update Job' : 'Create Job'}
             </Button>
           </div>
         </form>

@@ -6,12 +6,13 @@ from services.s3 import download_file_from_s3
 from agents.state import AgentState
 
 
-def _extract_text_from_file(file_bytes: bytes, filename: str, s3_key: str, aws_key: str, aws_secret: str, aws_region: str, s3_bucket: str) -> str:
+def _extract_text_pure_python(file_bytes: bytes, filename: str) -> str:
     """
-    Extract raw text from a resume file.
-    - PDF: Use Amazon Textract (S3-based, no 5MB byte limit)
-    - DOCX: Use python-docx
-    - TXT: Decode directly
+    Highly optimized 100% Python document parser.
+    Uses pdfplumber (best accuracy) -> pypdf -> PyPDF2 for PDFs.
+    Uses python-docx for DOCX/DOC files.
+    Uses UTF-8 decode for TXT.
+    No external API calls or AWS Textract required!
     """
     ext = os.path.splitext(filename)[1].lower() if filename else ".pdf"
 
@@ -22,69 +23,100 @@ def _extract_text_from_file(file_bytes: bytes, filename: str, s3_key: str, aws_k
         try:
             from docx import Document
             doc = Document(io.BytesIO(file_bytes))
-            return "\n".join(para.text for para in doc.paragraphs if para.text.strip())
-        except ImportError:
-            # python-docx not installed — fall through to Textract
-            pass
-        except Exception:
-            pass
+            lines = [para.text.strip() for para in doc.paragraphs if para.text.strip()]
+            # Also extract text inside tables (common in resume templates)
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text and cell_text not in lines:
+                            lines.append(cell_text)
+            text = "\n".join(lines)
+            if text.strip():
+                print(f"[ResumeParser] Extracted DOCX via python-docx ({len(text)} chars)")
+                return text
+        except Exception as e:
+            print(f"[ResumeParser] python-docx extraction warning: {e}")
 
-    # PDF (or DOCX fallback) — Use Textract via S3 reference (no 5MB limit)
-    import boto3
-    textract = boto3.client(
-        "textract",
-        aws_access_key_id=aws_key,
-        aws_secret_access_key=aws_secret,
-        region_name=aws_region,
-    )
-    response = textract.detect_document_text(
-        Document={
-            "S3Object": {
-                "Bucket": s3_bucket,
-                "Name": s3_key,
-            }
-        }
-    )
-    blocks = response.get("Blocks", [])
-    return " ".join(b["Text"] for b in blocks if b["BlockType"] == "LINE")
+    # PDF Parsing Chain: pdfplumber (highest layout accuracy) -> pypdf -> PyPDF2
+    if ext == ".pdf" or file_bytes:
+        # Tier 1: pdfplumber (handles multi-column resumes, tables, complex formatting)
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                extracted_pages = []
+                for page in pdf.pages:
+                    txt = page.extract_text(layout=True) or page.extract_text()
+                    if txt:
+                        extracted_pages.append(txt)
+                text = "\n".join(extracted_pages)
+                if text.strip():
+                    print(f"[ResumeParser] Extracted PDF via pdfplumber ({len(text)} chars)")
+                    return text
+        except Exception as e:
+            print(f"[ResumeParser] pdfplumber fallback warning: {e}")
+
+        # Tier 2: pypdf (fast, robust text stream extraction)
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+            extracted_pages = [page.extract_text() or "" for page in reader.pages]
+            text = "\n".join(extracted_pages)
+            if text.strip():
+                print(f"[ResumeParser] Extracted PDF via pypdf ({len(text)} chars)")
+                return text
+        except Exception as e:
+            print(f"[ResumeParser] pypdf fallback warning: {e}")
+
+        # Tier 3: PyPDF2 (standard fallback)
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(io.BytesIO(file_bytes))
+            extracted_pages = [page.extract_text() or "" for page in reader.pages]
+            text = "\n".join(extracted_pages)
+            if text.strip():
+                print(f"[ResumeParser] Extracted PDF via PyPDF2 ({len(text)} chars)")
+                return text
+        except Exception as e:
+            print(f"[ResumeParser] PyPDF2 fallback warning: {e}")
+
+    # If all specialized parsers failed, try raw UTF-8 decode as last resort
+    return file_bytes.decode("utf-8", errors="ignore")
 
 
 def resume_parser_agent(state: AgentState) -> AgentState:
     """
-    Agent 1: Downloads resume from S3, runs Amazon Textract (S3-based, no 5MB limit),
-    then uses LLM to structure the raw text into a clean JSON.
-    Supports PDF (Textract), DOCX (python-docx), TXT (direct decode).
+    Agent 1: Downloads resume from S3, extracts text using high-accuracy Python libraries
+    (pdfplumber / pypdf / python-docx), then uses Groq LLM to structure into clean JSON.
+    Zero external AWS Textract dependency — 100% free-tier compatible.
     """
     from services.llm import llm_call, parse_json_from_llm
 
     start = time.time()
     s3_key = state.get("s3_key", "")
-    filename = s3_key.split("/")[-1] if s3_key else ""
+    filename = s3_key.split("/")[-1] if s3_key else "resume.pdf"
     errors = state.get("errors", [])
     audit_entries = state.get("audit_entries", [])
-
-    aws_key = os.getenv("AWS_ACCESS_KEY_ID", "")
-    aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    aws_region = os.getenv("AWS_REGION", "ap-south-1")
-    s3_bucket = os.getenv("S3_BUCKET_NAME", "")
 
     if not s3_key:
         errors.append("ResumeParserAgent: s3_key is empty — cannot process resume")
         return {**state, "parsed_resume": {}, "raw_text": "", "errors": errors, "audit_entries": audit_entries}
 
     try:
-        # For DOCX/TXT we need the raw bytes; for PDF Textract reads from S3 directly
         ext = os.path.splitext(filename)[1].lower()
-        file_bytes = b""
-        if ext in (".txt", ".docx", ".doc"):
-            file_bytes = download_file_from_s3(s3_key)
 
-        raw_text = _extract_text_from_file(file_bytes, filename, s3_key, aws_key, aws_secret, aws_region, s3_bucket)
+        # Download bytes from S3
+        file_bytes = download_file_from_s3(s3_key)
+        if not file_bytes:
+            raise ValueError(f"S3 file download returned empty bytes for key: {s3_key}")
+
+        # Extract text using pure Python framework pipeline
+        raw_text = _extract_text_pure_python(file_bytes, filename)
 
         if not raw_text.strip():
-            raise ValueError("Textract returned empty text — resume may be image-only or corrupted")
+            raise ValueError("Resume text extraction returned empty text — file may be unreadable or image-only")
 
-        # Use LLM to parse raw text into structured JSON
+        # LLM Structuring
         system_prompt = """You are an expert resume parser. Extract structured information from resume text.
 Return ONLY valid JSON with this exact structure:
 {
@@ -106,7 +138,7 @@ Be thorough. If a field has no data, return an empty array."""
             "agent_name": "ResumeParserAgent",
             "input_summary": f"S3 key: {s3_key}, format: {ext}, text length: {len(raw_text)} chars",
             "output_summary": f"Parsed {len(parsed_resume.get('skills', []))} skills, {len(parsed_resume.get('experience', []))} jobs, {len(parsed_resume.get('projects', []))} projects",
-            "reasoning": f"Extraction method: {'Textract S3' if ext == '.pdf' else ext[1:].upper() + ' reader'} + LLM structuring",
+            "reasoning": "Pure Python parser (pdfplumber/pypdf/docx) + Groq LLM structuring",
             "timestamp": datetime.utcnow().isoformat(),
             "duration_ms": duration_ms,
             "llm_model": model_used,
@@ -121,7 +153,9 @@ Be thorough. If a field has no data, return an empty array."""
         }
 
     except Exception as e:
-        errors.append(f"ResumeParserAgent error: {str(e)}")
+        err_msg = f"ResumeParserAgent error: {str(e)}"
+        errors.append(err_msg)
+        print(f"[ResumeParser] FAILED: {err_msg}")
         audit_entries.append({
             "agent_name": "ResumeParserAgent",
             "input_summary": f"S3 key: {s3_key}",

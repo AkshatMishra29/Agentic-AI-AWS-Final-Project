@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import AuthForm from '../components/auth/AuthForm';
 import { loginUser } from '../api';
@@ -7,9 +7,20 @@ import toast from 'react-hot-toast';
 import { FiBriefcase, FiCheckCircle } from 'react-icons/fi';
 
 const Login = () => {
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [loading, setLoading] = React.useState(false);
+  const { user, login, initializing } = useAuth();
   const navigate = useNavigate();
+
+  // If already authenticated and session initialized, automatically redirect logged-in users away from /login
+  useEffect(() => {
+    if (!initializing && user) {
+      if (user.role === 'hr') {
+        navigate('/hr/dashboard', { replace: true });
+      } else {
+        navigate('/candidate/dashboard', { replace: true });
+      }
+    }
+  }, [user, initializing, navigate]);
 
   const handleLogin = async (data) => {
     setLoading(true);
@@ -19,9 +30,9 @@ const Login = () => {
       toast.success('Signed in successfully');
       
       if (res.data.role === 'hr') {
-        navigate('/hr/dashboard');
+        navigate('/hr/dashboard', { replace: true });
       } else {
-        navigate('/candidate/dashboard');
+        navigate('/candidate/dashboard', { replace: true });
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Authentication failed. Please check credentials.');
@@ -29,6 +40,17 @@ const Login = () => {
       setLoading(false);
     }
   };
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading session...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-gray-50 dark:bg-gray-900">

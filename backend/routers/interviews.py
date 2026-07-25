@@ -41,7 +41,12 @@ async def schedule_interview(
 
     candidate_email = app_doc["candidate_id"]
     candidate_user = await db.users.find_one({"email": candidate_email})
-    candidate_name = candidate_user.get("full_name") if candidate_user else candidate_email.split("@")[0].capitalize()
+    candidate_name = (
+        (candidate_user.get("name") if candidate_user else None) or
+        (candidate_user.get("full_name") if candidate_user else None) or
+        app_doc.get("candidate_name") or
+        candidate_email.split("@")[0].replace(".", " ").capitalize()
+    )
 
     # Generate Meet Link & Event Info
     meet_link = generate_meet_link()

@@ -1,14 +1,42 @@
-# Python
+# Secrets & Environment Files
+.env
+*.env
+!.env.example
+backend/.env
+frontend/.env
+*.pem
+*.key
+*.crt
+*.pfx
+
+# AWS & Cloud Credentials
+.aws/
+aws_credentials
+cloud_credentials/
+
+# Python Cache & Virtual Environments
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
 .venv/
-*.env
-backend/.env
+env/
+.pytest_cache/
 
-# Node
+# Node & Frontend Builds
 node_modules/
 dist/
 build/
+.vite/
+
+# Application Uploads & Temp Files
+backend/uploads/*
+!backend/uploads/.gitkeep
+uploads/
+*.log
+
+# OS & Editor Files
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/

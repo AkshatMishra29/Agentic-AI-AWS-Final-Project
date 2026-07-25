@@ -1,10 +1,24 @@
 import React from 'react';
-import { FiGrid, FiBriefcase, FiFileText, FiUploadCloud, FiUser } from 'react-icons/fi';
+import { FiGrid, FiBriefcase, FiFileText, FiUploadCloud, FiUser, FiCpu, FiSend, FiBarChart2 } from 'react-icons/fi';
 
 const Sidebar = ({ role, activeTab, setActiveTab }) => {
+  const adminLinks = [
+    { key: 'overview', label: 'Overview', icon: FiGrid },
+    { key: 'hr_management', label: 'HR Management', icon: FiUser },
+    { key: 'jobs', label: 'Job Postings', icon: FiBriefcase },
+    { key: 'copilot', label: 'Recruiter Copilot', icon: FiCpu },
+    { key: 'offers', label: 'Offer Letters', icon: FiSend },
+    { key: 'analytics', label: 'Analytics', icon: FiBarChart2 },
+    { key: 'interviews', label: 'Scheduled Interviews', icon: FiGrid },
+    { key: 'kb', label: 'Knowledge Base', icon: FiFileText },
+  ];
+
   const hrLinks = [
     { key: 'overview', label: 'Overview', icon: FiGrid },
     { key: 'jobs', label: 'Job Postings', icon: FiBriefcase },
+    { key: 'copilot', label: 'Recruiter Copilot', icon: FiCpu },
+    { key: 'offers', label: 'Offer Letters', icon: FiSend },
+    { key: 'analytics', label: 'Analytics', icon: FiBarChart2 },
     { key: 'interviews', label: 'Scheduled Interviews', icon: FiGrid },
     { key: 'kb', label: 'Knowledge Base', icon: FiFileText },
   ];
@@ -18,13 +32,13 @@ const Sidebar = ({ role, activeTab, setActiveTab }) => {
     { key: 'profile', label: 'My Profile', icon: FiUser },
   ];
 
-  const navItems = role === 'hr' ? hrLinks : candidateLinks;
+  const navItems = role === 'admin' ? adminLinks : role === 'hr' ? hrLinks : candidateLinks;
 
   return (
     <aside className="w-56 bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 min-h-[calc(100vh-4rem)] p-3 flex flex-col hidden md:flex">
       <div className="space-y-0.5 flex-1">
         <p className="px-3 text-[10px] font-bold text-gray-400 dark:text-gray-600 uppercase tracking-widest mb-3 mt-1">
-          {role === 'hr' ? 'HR Portal' : 'Candidate'}
+          {role === 'admin' ? 'Admin Portal' : role === 'hr' ? 'HR Portal' : 'Candidate'}
         </p>
         {navItems.map((item) => {
           const Icon = item.icon;

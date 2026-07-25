@@ -59,7 +59,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 def require_role(allowed_roles: list[str]):
     async def role_checker(current_user: dict = Depends(get_current_user)):
-        if current_user.get("role") not in allowed_roles:
+        user_role = current_user.get("role")
+        # Admin has full administrative access including all HR permissions
+        if user_role not in allowed_roles and not (user_role == "admin" and "hr" in allowed_roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Operation not permitted for your user role"

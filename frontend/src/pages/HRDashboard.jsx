@@ -8,6 +8,9 @@ import JobList from '../components/hr/JobList';
 import ApplicantsView from '../components/hr/ApplicantsView';
 import API, { getJobs, getHrInterviews, deleteInterview } from '../api';
 import AiAssistant from '../components/candidate/AiAssistant';
+import RecruiterCopilot from '../components/hr/RecruiterCopilot';
+import OfferLettersView from '../components/hr/OfferLettersView';
+import RecruitmentAnalytics from '../components/hr/RecruitmentAnalytics';
 
 const HRDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -183,6 +186,18 @@ const HRDashboard = () => {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === 'copilot' && (
+            <RecruiterCopilot />
+          )}
+
+          {activeTab === 'offers' && (
+            <OfferLettersView />
+          )}
+
+          {activeTab === 'analytics' && (
+            <RecruitmentAnalytics />
           )}
 
           {activeTab === 'kb' && (

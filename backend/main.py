@@ -9,19 +9,24 @@ from bson import ObjectId
 from database import db
 from models import UserCreate, UserLogin, JobCreate, JobUpdate, ApplicationCreate, ApplicationStatusUpdate
 from auth import hash_password, verify_password, create_token, get_current_user, require_role
-from routers import s3_upload, screening, interviews, assistant
+from routers import s3_upload, screening, interviews, assistant, admin, copilot, offers, analytics
 
-app = FastAPI(title="HireFlow API - Agentic Recruitment Pipeline", version="4.0.0")
+app = FastAPI(title="HireFlow API - Agentic Recruitment Pipeline", version="5.0.0")
 
-# Enable CORS for React frontend (supports custom FRONTEND_URL env)
+# Enable CORS for React frontend (supports custom FRONTEND_URL env & production domains)
 frontend_origin = os.getenv("FRONTEND_URL", "").strip()
-allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"]
-if frontend_origin and frontend_origin not in allowed_origins:
-    allowed_origins.append(frontend_origin)
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174", "https://*.vercel.app"]
+
+if frontend_origin:
+    if frontend_origin == "*":
+        allowed_origins = ["*"]
+    elif frontend_origin not in allowed_origins:
+        allowed_origins.append(frontend_origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=allowed_origins if "*" in allowed_origins else allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app" if "*" not in allowed_origins else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,11 +37,28 @@ async def startup_db_indexing():
     from database import create_db_indexes
     await create_db_indexes()
 
-# --- Register Module 3 & 4 Routers ---
+from fastapi.responses import JSONResponse
+from services.llm import GroqRateLimitException
+
+@app.exception_handler(GroqRateLimitException)
+async def groq_rate_limit_exception_handler(request, exc: GroqRateLimitException):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": f"⚡ Groq API Rate Limit Reached: All LLM models have temporarily hit quota limits. Please wait ~60 seconds and try again.",
+            "error_type": "GroqRateLimitException"
+        }
+    )
+
+# --- Register Module 3, 4, 5 Routers ---
 app.include_router(s3_upload.router)    # /resumes/upload, /resumes/me
 app.include_router(screening.router)   # /screening/run, /screening/results/{job_id}
 app.include_router(interviews.router)  # /interviews/schedule, /interviews/candidate/me
-app.include_router(assistant.router)   # /assistant/faq, /assistant/resume-advice, /assistant/interview-coach, /assistant/company-docs
+app.include_router(assistant.router)   # /assistant/faq, /assistant/resume-advice
+app.include_router(admin.router)       # /admin/stats, /admin/hr
+app.include_router(copilot.router)     # /copilot/query
+app.include_router(offers.router)      # /offers/generate/{id}, /offers/list, /offers/{id}/download
+app.include_router(analytics.router)   # /analytics/overview, /analytics/job/{id}
 
 
 def serialize_doc(doc):
@@ -60,25 +82,155 @@ async def dbtest():
 
 # --- AUTH ROUTES ---
 
+# In-memory RAM cache for blazing fast <1ms OTP verification
+OTP_STORE = {} # { email: {"otp": "123456", "expires_at": timestamp, "name": name, "password": pass} }
+
+@app.post("/auth/send-otp")
+async def send_candidate_otp(payload: dict, background_tasks: BackgroundTasks):
+    """
+    Blazing fast candidate OTP generation & background email dispatch.
+    Returns HTTP 200 in ~15ms while email sends in background thread.
+    """
+    import random, time
+    from services.scheduler import send_otp_email
+
+    email = payload.get("email", "").strip().lower()
+    name = payload.get("name", "Candidate").strip()
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered. Please sign in.")
+
+    # Generate 6-digit random OTP
+    otp_code = f"{random.randint(100000, 999999)}"
+    expires_at = time.time() + 300  # 5 minutes validity
+
+    # Store in RAM cache for <1ms memory lookup speed
+    OTP_STORE[email] = {
+        "otp": otp_code,
+        "expires_at": expires_at,
+        "name": name
+    }
+
+    # Asynchronous non-blocking email dispatch
+    background_tasks.add_task(send_otp_email, candidate_email=email, candidate_name=name, otp_code=otp_code)
+
+    return {
+        "message": f"Verification OTP code sent to {email}", 
+        "expires_in_seconds": 300
+    }
+
 @app.post("/register")
 async def register(user: UserCreate):
+    # Reject self-registration for HR or Admin roles
+    if user.role != "candidate":
+        raise HTTPException(
+            status_code=403, 
+            detail="Public registration is restricted to Candidates only. HR accounts must be created by an Administrator."
+        )
+
     existing = await db.users.find_one({"email": user.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+
     user_dict = user.dict()
+    user_dict.pop("hr_code", None)
+    user_dict["role"] = "candidate"
+    user_dict["is_active"] = True
     user_dict["password"] = hash_password(user.password)
     user_dict["created_at"] = datetime.utcnow()
     await db.users.insert_one(user_dict)
-    return {"message": "User registered successfully"}
+    return {"message": "Candidate registered successfully"}
+
+@app.post("/auth/verify-otp-register")
+async def verify_otp_register(payload: dict):
+    """
+    Verifies 6-digit OTP from RAM cache and registers Candidate account instantly.
+    """
+    import time
+    email = payload.get("email", "").strip().lower()
+    otp_entered = payload.get("otp", "").strip()
+
+    if not email or not otp_entered:
+        raise HTTPException(status_code=400, detail="Email and OTP code are required")
+
+    record = OTP_STORE.get(email)
+    if not record:
+        raise HTTPException(status_code=400, detail="No OTP requested for this email or OTP expired. Please click Resend OTP.")
+
+    if time.time() > record["expires_at"]:
+        OTP_STORE.pop(email, None)
+        raise HTTPException(status_code=400, detail="OTP code has expired (5 minute limit). Please click Resend OTP.")
+
+    if record["otp"] != otp_entered:
+        raise HTTPException(status_code=400, detail="Invalid OTP code. Please check your email and try again.")
+
+    # OTP is valid! Create candidate account in MongoDB
+    existing = await db.users.find_one({"email": email})
+    if not existing:
+        name = payload.get("name") or record.get("name", "Candidate")
+        raw_password = payload.get("password", "123456")
+        candidate_doc = {
+            "name": name,
+            "email": email,
+            "role": "candidate",
+            "is_active": True,
+            "is_verified": True,
+            "password": hash_password(raw_password),
+            "created_at": datetime.utcnow()
+        }
+        await db.users.insert_one(candidate_doc)
+
+    # Purge spent OTP from RAM
+    OTP_STORE.pop(email, None)
+
+    token = create_token({"sub": email, "role": "candidate"})
+    return {"access_token": token, "token_type": "bearer", "role": "candidate", "email": email, "message": "Email verified & registered successfully!"}
 
 
 @app.post("/login")
 async def login(user: UserLogin):
     db_user = await db.users.find_one({"email": user.email})
-    if not db_user or not verify_password(user.password, db_user["password"]):
+    password_hash = db_user.get("password") or db_user.get("password_hash") if db_user else None
+    if not db_user or not password_hash or not verify_password(user.password, password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if db_user.get("is_active") is False:
+        raise HTTPException(status_code=403, detail="Your account has been deactivated by an Administrator. Please contact support.")
     token = create_token({"sub": user.email, "role": db_user["role"]})
     return {"access_token": token, "token_type": "bearer", "role": db_user["role"], "email": db_user["email"]}
+
+@app.post("/google-login")
+async def google_login(payload: dict):
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required from Google Auth token")
+    
+    db_user = await db.users.find_one({"email": email})
+    
+    # Auto-provision candidate account if candidate uses standard Google login for the first time
+    if not db_user:
+        new_candidate = {
+            "name": payload.get("name", email.split("@")[0]),
+            "email": email,
+            "role": "candidate",
+            "is_active": True,
+            "password": hash_password("GoogleSSO_Protected_Pass_2026!"),
+            "created_at": datetime.utcnow()
+        }
+        await db.users.insert_one(new_candidate)
+        db_user = new_candidate
+    
+    if db_user.get("role") != "candidate":
+        raise HTTPException(status_code=403, detail="Google Single Sign-On is reserved for Candidate accounts only.")
+        
+    if db_user.get("is_active") is False:
+        raise HTTPException(status_code=403, detail="Your account has been deactivated by an Administrator.")
+        
+    token = create_token({"sub": db_user["email"], "role": "candidate"})
+    return {"access_token": token, "token_type": "bearer", "role": "candidate", "email": db_user["email"]}
 
 
 # --- JOBS ROUTES ---

@@ -9,16 +9,18 @@ const STAGES = [
   { key: 'applied',        label: 'Applied',            desc: 'Application submitted' },
   { key: 'under_review',   label: 'Under Review',       desc: 'HR is reviewing your profile' },
   { key: 'shortlisted',    label: 'Shortlisted',        desc: 'You\'ve been shortlisted! Check interview details below.' },
-  { key: 'hired',          label: 'Offer Extended',     desc: 'Congratulations! 🎉' },
+  { key: 'offered',        label: 'Offer Letter',       desc: 'Congratulations! Official Offer Extended 🎉' },
+  { key: 'hired',          label: 'Hired',              desc: 'Hired & Onboarded! 🎉' },
 ];
 
-const STAGE_ORDER = ['applied', 'under_review', 'shortlisted', 'hired'];
+const STAGE_ORDER = ['applied', 'under_review', 'shortlisted', 'offered', 'hired'];
 
 const statusMeta = {
   applied:      { color: 'bg-blue-500',    text: 'Applied',          cls: 'text-blue-600 bg-blue-50 dark:bg-blue-950/40 border-blue-200' },
   under_review: { color: 'bg-amber-500',   text: 'Under Review',     cls: 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 border-amber-200' },
   shortlisted:  { color: 'bg-indigo-500',  text: 'Shortlisted 🎉',    cls: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200' },
   interview:    { color: 'bg-indigo-500',  text: 'Shortlisted 🎉',    cls: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200' },
+  offered:      { color: 'bg-emerald-500', text: 'Offer Letter Received 🎉', cls: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 font-bold' },
   hired:        { color: 'bg-emerald-500', text: 'Hired 🎉',         cls: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200' },
   rejected:     { color: 'bg-red-400',     text: 'Not Selected',     cls: 'text-red-600 bg-red-50 dark:bg-red-950/40 border-red-200' },
 };

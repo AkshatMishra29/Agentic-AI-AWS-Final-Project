@@ -4,7 +4,36 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [initializing, setInitializing] = useState(true); // ← prevents premature redirect
+  const [initializing, setInitializing] = useState(true);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.style.colorScheme = 'dark';
+    } else {
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      const root = document.documentElement;
+      if (next === 'dark') {
+        root.classList.add('dark');
+        root.style.colorScheme = 'dark';
+      } else {
+        root.classList.remove('dark');
+        root.style.colorScheme = 'light';
+      }
+      localStorage.setItem('theme', next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     // Purge any stale legacy localStorage session tokens
@@ -19,7 +48,7 @@ export const AuthProvider = ({ children }) => {
     if (token && role) {
       setUser({ token, role, email });
     }
-    setInitializing(false); // ← signal: auth check done, safe to route
+    setInitializing(false);
   }, []);
 
   const login = (data, email) => {
@@ -40,7 +69,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, initializing }}>
+    <AuthContext.Provider value={{ user, login, logout, initializing, theme, toggleTheme }}>
       {children}
     </AuthContext.Provider>
   );

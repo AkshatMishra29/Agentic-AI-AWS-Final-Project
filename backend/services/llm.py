@@ -17,6 +17,13 @@ GROQ_MODELS = [
 ]
 
 
+class GroqRateLimitException(Exception):
+    """Custom exception raised when all Groq models hit API rate/token quota limits."""
+    def __init__(self, message: str = "Groq API rate limit or token quota exhausted across all available models. Please wait 60 seconds or update your Groq API key."):
+        self.message = message
+        super().__init__(self.message)
+
+
 def call_groq(system_prompt: str, user_prompt: str, temperature: float = 0.1) -> tuple[str, str, int]:
     """
     Call Groq API with automatic fallback across multiple models if rate limits (HTTP 429) occur.
@@ -27,6 +34,7 @@ def call_groq(system_prompt: str, user_prompt: str, temperature: float = 0.1) ->
 
     client = Groq(api_key=GROQ_API_KEY)
     last_exception = None
+    rate_limit_encountered = False
 
     for model in GROQ_MODELS:
         try:
@@ -47,13 +55,18 @@ def call_groq(system_prompt: str, user_prompt: str, temperature: float = 0.1) ->
         except Exception as e:
             last_exception = e
             err_msg = str(e)
-            if "429" in err_msg or "rate_limit" in err_msg.lower() or "limit" in err_msg.lower():
-                print(f"[Groq] Model '{model}' rate limited (429). Trying fallback model...")
+            if "429" in err_msg or "rate_limit" in err_msg.lower() or "limit" in err_msg.lower() or "quota" in err_msg.lower():
+                rate_limit_encountered = True
+                print(f"[Groq Rate Limit Notice] Model '{model}' rate limited (429/Quota). Trying fallback model...")
                 continue
             else:
-                # Non-rate-limit error — try next model anyway
-                print(f"[Groq] Model '{model}' error ({e}). Trying fallback model...")
+                print(f"[Groq Warning] Model '{model}' error ({e}). Trying fallback model...")
                 continue
+
+    if rate_limit_encountered:
+        raise GroqRateLimitException(
+            f"Groq Rate Limit Reached: All Groq models ({', '.join(GROQ_MODELS)}) have temporarily hit rate/token quota limits. Please wait ~60 seconds before retrying."
+        )
 
     raise RuntimeError(f"All Groq models failed. Last error: {last_exception}")
 

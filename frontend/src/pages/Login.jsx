@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import AuthForm from '../components/auth/AuthForm';
-import { loginUser, getErrorMessage } from '../api';
+import API, { loginUser, getErrorMessage } from '../api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { FiBriefcase, FiCheckCircle } from 'react-icons/fi';
@@ -9,13 +10,17 @@ import { FiBriefcase, FiCheckCircle } from 'react-icons/fi';
 const Login = () => {
   const [loading, setLoading] = React.useState(false);
   const [serverError, setServerError] = React.useState('');
+  const [showGoogleModal, setShowGoogleModal] = React.useState(false);
+  const [selectedGoogleEmail, setSelectedGoogleEmail] = React.useState('');
   const { user, login, initializing } = useAuth();
   const navigate = useNavigate();
 
   // If already authenticated and session initialized, automatically redirect logged-in users away from /login
   useEffect(() => {
     if (!initializing && user) {
-      if (user.role === 'hr') {
+      if (user.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      } else if (user.role === 'hr') {
         navigate('/hr/dashboard', { replace: true });
       } else {
         navigate('/candidate/dashboard', { replace: true });
@@ -31,7 +36,9 @@ const Login = () => {
       login(res.data, data.email);
       toast.success('Signed in successfully');
       
-      if (res.data.role === 'hr') {
+      if (res.data.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true });
+      } else if (res.data.role === 'hr') {
         navigate('/hr/dashboard', { replace: true });
       } else {
         navigate('/candidate/dashboard', { replace: true });
@@ -109,10 +116,52 @@ const Login = () => {
 
           <AuthForm type="login" onSubmit={handleLogin} isLoading={loading} serverError={serverError} />
 
+          {/* Continue with Google Candidate Auth (Placed below Email/Password form) */}
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center space-x-2 text-[11px] text-gray-400">
+              <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+              <span>or sign in with Google</span>
+              <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+            </div>
+
+            <div className="w-full flex justify-center">
+              <GoogleLogin
+                onSuccess={async (credentialResponse) => {
+                  try {
+                    // Decode real JWT credential token returned by native Google popup
+                    const base64Url = credentialResponse.credential.split('.')[1];
+                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+                    const googleUser = JSON.parse(jsonPayload);
+                    
+                    const userEmail = googleUser.email;
+                    const userName = googleUser.name || googleUser.given_name || 'Candidate';
+
+                    const res = await API.post('/google-login', { email: userEmail, name: userName });
+                    login(res.data, userEmail);
+                    toast.success(`Signed in with Google as ${userEmail}!`);
+                    navigate('/candidate/dashboard', { replace: true });
+                  } catch (err) {
+                    const msg = err.response?.data?.detail || 'Google authentication failed';
+                    toast.error(msg);
+                  }
+                }}
+                onError={() => {
+                  toast.error('Google Sign-In failed. Please configure VITE_GOOGLE_CLIENT_ID or sign in via email.');
+                }}
+                theme="outline"
+                size="large"
+                shape="pill"
+                text="continue_with"
+                width="100%"
+              />
+            </div>
+          </div>
+
           <p className="text-center text-sm text-gray-500 dark:text-gray-400 pt-4">
             Don't have an account?{' '}
             <Link to="/register" className="font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
-              Create an account
+              Create a candidate account
             </Link>
           </p>
         </div>

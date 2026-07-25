@@ -331,35 +331,54 @@ const FairnessModal = ({ applications, onClose }) => {
 
 // ─── Schedule Interview Modal ────────────────────────────────────────────────
 const ScheduleModal = ({ app, onClose, onSuccess }) => {
-  const [scheduledTime, setScheduledTime] = useState('');
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(10, 0, 0, 0);
+
+  const [selectedDateStr, setSelectedDateStr] = useState(tomorrow.toISOString().split('T')[0]);
+  const [selectedTimeStr, setSelectedTimeStr] = useState('10:00');
+  const [duration, setDuration] = useState('45 mins');
   const [loading, setLoading] = useState(false);
 
-  // Compute minimum datetime string for HTML5 datetime-local input (current local time)
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  const minDateTime = now.toISOString().slice(0, 16);
+  // Compute min date string
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const applyPreset = (daysFromNow, hour = 10) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromNow);
+    setSelectedDateStr(d.toISOString().split('T')[0]);
+    setSelectedTimeStr(`${hour < 10 ? '0' + hour : hour}:00`);
+    toast.success(`Preset applied: ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${hour}:00`);
+  };
 
   const handleScheduleSubmit = async (e) => {
     e.preventDefault();
-    if (!scheduledTime) {
-      toast.error('Please pick a date and time');
+    if (!selectedDateStr || !selectedTimeStr) {
+      toast.error('Please select both date and time');
       return;
     }
 
-    const selectedDate = new Date(scheduledTime);
-    if (selectedDate < new Date()) {
-      toast.error('Cannot schedule an interview in the past. Please select a future date & time.');
+    const combinedDateTime = new Date(`${selectedDateStr}T${selectedTimeStr}`);
+    if (combinedDateTime < new Date()) {
+      toast.error('Cannot schedule an interview in the past. Please pick a future date & time.');
       return;
     }
 
     setLoading(true);
     try {
-      const formatted = selectedDate.toLocaleString('en-IN', {
-        dateStyle: 'medium', timeStyle: 'short'
+      const formattedDate = combinedDateTime.toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
       });
+
       await scheduleInterview({
         application_id: app.id,
-        scheduled_time: formatted,
+        scheduled_time: `${formattedDate} (${duration})`,
       });
       onSuccess();
       onClose();
@@ -371,52 +390,151 @@ const ScheduleModal = ({ app, onClose, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/70 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-7 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold border border-indigo-100 dark:border-indigo-900/50">
-              <FiCalendar className="w-5 h-5" />
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold border border-indigo-100 dark:border-indigo-900/50 shadow-sm">
+              <FiCalendar className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Schedule Interview</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{app.candidate_name} ({app.candidate_id})</p>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">Schedule Interview Call</h3>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                Candidate: <strong className="text-slate-800 dark:text-slate-200">{app.candidate_name || 'Candidate'}</strong> ({app.candidate_id})
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+          <button 
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          >
             <FiX className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleScheduleSubmit} className="space-y-4">
+        {/* Quick Date Presets Bar */}
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+            ⚡ Quick Presets
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => applyPreset(1, 10)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 transition text-center cursor-pointer"
+            >
+              Tomorrow (10 AM)
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(2, 14)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 transition text-center cursor-pointer"
+            >
+              In 2 Days (2 PM)
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset(7, 11)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 transition text-center cursor-pointer"
+            >
+              Next Week (11 AM)
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleScheduleSubmit} className="space-y-5">
+          {/* Separate Date and Time Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Interview Date *
+              </label>
+              <input
+                type="date"
+                min={todayStr}
+                value={selectedDateStr}
+                onChange={(e) => setSelectedDateStr(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Start Time *
+              </label>
+              <input
+                type="time"
+                value={selectedTimeStr}
+                onChange={(e) => setSelectedTimeStr(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium cursor-pointer"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Session Duration Selector */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-              Select Date & Time *
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              Call Duration
             </label>
-            <input
-              type="datetime-local"
-              min={minDateTime}
-              value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-              required
-            />
-            <p className="text-[10px] text-gray-400 mt-1">Interviews cannot be scheduled in the past.</p>
+            <div className="flex space-x-2">
+              {['30 mins', '45 mins', '60 mins'].map((dur) => (
+                <button
+                  type="button"
+                  key={dur}
+                  onClick={() => setDuration(dur)}
+                  className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer ${
+                    duration === dur
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {dur}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="bg-indigo-50/60 dark:bg-indigo-950/30 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-1 text-xs text-indigo-800 dark:text-indigo-200">
-            <p className="font-bold flex items-center"><FiVideo className="mr-1.5 w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Instant Google Meet Generation</p>
-            <p className="text-[11px] opacity-85 leading-relaxed">A unique Google Meet URL will be created and an automated confirmation email sent to the candidate.</p>
+          {/* Google Meet Info Banner */}
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-slate-900/60 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 space-y-1 text-xs text-indigo-900 dark:text-indigo-200">
+            <p className="font-extrabold flex items-center text-indigo-700 dark:text-indigo-300">
+              <FiVideo className="mr-2 w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+              Automated Google Meet Call Invite
+            </p>
+            <p className="text-[11px] opacity-85 leading-relaxed">
+              A live Google Meet meeting URL will be auto-generated and dispatched immediately to candidate <strong>{app.candidate_id}</strong> via email.
+            </p>
           </div>
 
-          <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-            <Button variant="secondary" size="sm" type="button" onClick={onClose}>
-              Cancel
+          {/* Footer Actions */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await API.post(`/offers/generate/${app.id}`, { salary: "$120,000 / year", joining_date: "1st of Next Month" });
+                  toast.success("Offer Letter auto-generated!");
+                  onClose();
+                } catch (err) {
+                  toast.error("Failed to generate offer letter");
+                }
+              }}
+            >
+              Offer Letter
             </Button>
-            <Button variant="primary" size="sm" type="submit" isLoading={loading}>
-              Confirm & Send Invite
-            </Button>
+            
+            <div className="flex items-center space-x-2">
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" isLoading={loading} size="sm" className="font-bold shadow-md">
+                Confirm & Send Invite
+              </Button>
+            </div>
           </div>
         </form>
       </div>

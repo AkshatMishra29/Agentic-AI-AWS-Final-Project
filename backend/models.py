@@ -7,6 +7,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6)
     role: str  # "candidate" or "hr"
+    hr_code: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr

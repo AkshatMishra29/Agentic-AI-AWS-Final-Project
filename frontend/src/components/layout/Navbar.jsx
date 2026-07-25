@@ -1,26 +1,35 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { FiLogOut, FiBriefcase, FiChevronDown } from 'react-icons/fi';
+import { FiLogOut, FiBriefcase, FiChevronDown, FiSun, FiMoon } from 'react-icons/fi';
 import NotificationBell from './NotificationBell';
 
 const Navbar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, theme, toggleTheme } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
-    <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700/60 sticky top-0 z-30 px-6 flex items-center justify-between">
+    <header className="h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-30 px-6 flex items-center justify-between transition-all">
       {/* Brand */}
       <div className="flex items-center space-x-3">
-        <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-blue-500 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+        <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-blue-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
           <FiBriefcase className="w-5 h-5" />
         </div>
-        <span className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">
+        <span className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
           Hire<span className="text-indigo-600 dark:text-indigo-400">Flow</span>
         </span>
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-3">
+        {/* Dark Mode Toggle */}
+        <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+        >
+          {theme === 'dark' ? <FiSun className="w-4 h-4 text-amber-400" /> : <FiMoon className="w-4 h-4 text-slate-600" />}
+        </button>
+
         <NotificationBell />
 
         {/* User profile dropdown */}
